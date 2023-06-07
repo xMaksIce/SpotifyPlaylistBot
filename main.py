@@ -64,43 +64,46 @@ async def create_playlist(message: types.Message):
     # в словосочетаниях со знаком "+" заменяем его на пробел
     for i in range(len(words)):
         words[i] = words[i].replace('+', ' ')
-    # проходимся по каждому слову(словосочетанию)
-    for track_name in words:
-        track_found = False
-        # Спотифай позволяет выводить не более 50 треков за раз, поэтому проходимся по ним в цикле со сдвигом
-        for offset in range(0, 300, 50):
-            results = sp.search(q=track_name, limit=50, offset=offset, type='track')
-            if results['tracks']['items']:
-                for track in results['tracks']['items']:
-                    # сравнение происходит без учёта регистра
-                    if track['name'].lower() == track_name.lower():
-                        tracks_uris.append(track['uri'])
-                        track_found = True
+    if words:
+        # проходимся по каждому слову(словосочетанию)
+        for track_name in words:
+            track_found = False
+            # Спотифай позволяет выводить не более 50 треков за раз, поэтому проходимся по ним в цикле со сдвигом
+            for offset in range(0, 300, 50):
+                results = sp.search(q=track_name, limit=50, offset=offset, type='track')
+                if results['tracks']['items']:
+                    for track in results['tracks']['items']:
+                        # сравнение происходит без учёта регистра
+                        if track['name'].lower() == track_name.lower():
+                            tracks_uris.append(track['uri'])
+                            track_found = True
+                            break
+                    if track_found:
                         break
-                if track_found:
+                else:
+                    playlist_completed = False
+                    missing_track = track_name
                     break
-            else:
+            # если один из треков не найден, то прерываем поиск остальных
+            if not track_found:
                 playlist_completed = False
                 missing_track = track_name
                 break
-        # после просмотра 300 треков проверяем, удалось ли найти подходящий
-        if not track_found:
-            playlist_completed = False
-            missing_track = track_name
-            # если один из треков не найден, то прерываем поиск остальных 
-            # и помечаем плейлист, как незавершённый
-            break
 
-    if playlist_completed:
-        playlist = sp.user_playlist_create(
-            sp.current_user()['id'],
-            name=message.text.replace('+', ' '),
-            public=True)
-        sp.playlist_add_items(playlist['id'], tracks_uris)
-        await start_msg.edit_text(f'Плейлист успешно создан!\n{playlist["external_urls"]["spotify"]}')
+        if playlist_completed:
+            playlist = sp.user_playlist_create(
+                sp.current_user()['id'],
+                name=message.text.replace('+', ' '),
+                public=True)
+            sp.playlist_add_items(playlist['id'], tracks_uris)
+            await start_msg.edit_text(f'Плейлист успешно создан!\n{playlist["external_urls"]["spotify"]}')
+        else:
+            await start_msg.edit_text('Не удалось подобрать подходящие треки.\n'
+                                      f'Ненайденный трек: "{missing_track}".')
+            await message.answer('Используйте /help, чтобы получить подсказки по поиску.')
+    # если в строке не оказалось слов
     else:
-        await start_msg.edit_text('Не удалось подобрать подходящие треки.\n'
-                                  f'Ненайденный трек: "{missing_track}".')
+        await start_msg.edit_text('Не удалось создать плейлист.')
         await message.answer('Используйте /help, чтобы получить подсказки по поиску.')
 
 
