@@ -87,7 +87,8 @@ async def create_playlist(message: types.Message):
         if not track_found:
             playlist_completed = False
             missing_track = track_name
-            # если один из треков не найден, то прерываем поиск остальных
+            # если один из треков не найден, то прерываем поиск остальных 
+            # и помечаем плейлист, как незавершённый
             break
 
     if playlist_completed:
