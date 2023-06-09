@@ -1,21 +1,23 @@
 import os
+import re
+
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, executor, types
 import spotipy
-from spotipy import SpotifyOAuth
-import re
 
 load_dotenv()
-API_TOKEN = os.getenv('API_TOKEN')
 CLIENT_ID = os.getenv('CLIENT_ID')
 CLIENT_SECRET = os.getenv('CLIENT_SECRET')
 REDIRECT_URI = os.getenv('REDIRECT_URI')
+API_TOKEN = os.getenv('API_TOKEN')
+
+# Авторизуем бота с помощью токена от @BotFather
 bot = Bot(token=API_TOKEN)
 dp = Dispatcher(bot)
-# авторизуем бота через его аккаунт Спотифай
-sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=CLIENT_ID,
-                                               client_secret=CLIENT_SECRET,
-                                               redirect_uri=REDIRECT_URI))
+# Входим в аккаунт Спотифай, используя данные со страницы разработчика
+sp = spotipy.Spotify(auth_manager=spotipy.SpotifyOAuth(client_id=CLIENT_ID,
+                                                       client_secret=CLIENT_SECRET,
+                                                       redirect_uri=REDIRECT_URI))
 
 
 @dp.message_handler(commands=['start'])
@@ -32,7 +34,8 @@ async def welcome(message: types.Message):
 async def search_example(message: types.Message):
     example_1 = types.InputFile('examples/example_1_1.jpg')
     example_2 = types.InputFile('examples/example_1_2.jpg')
-    await message.answer_media_group([types.InputMediaPhoto(example_1), types.InputMediaPhoto(example_2)])
+    await message.answer_media_group([types.InputMediaPhoto(example_1),
+                                      types.InputMediaPhoto(example_2)])
     await message.answer('Пример написания фразы.')
 
 
@@ -54,26 +57,29 @@ async def information(message: types.Message):
 @dp.message_handler()
 async def create_playlist(message: types.Message):
     start_msg = await message.answer('Выполняется подбор треков...')
-    tracks_uris = []
-    playlist_completed = True
-    missing_track = None
-    # удаляем из фразы все небуквенные символы, кроме "+"
+    # Удаляем из фразы все небуквенные символы, кроме "+"
     phrase = re.sub(r'[^\w\s+]', '', message.text)
-    # разбиваем фразу(словосочетание со знаком "+" запишется, как один элемент)
+    # Разбиваем фразу(словосочетание со знаком "+" запишется, как один элемент)
     words = phrase.split()
-    # в словосочетаниях со знаком "+" заменяем его на пробел
+    # В словосочетаниях со знаком "+" заменяем его на пробел
     for i in range(len(words)):
         words[i] = words[i].replace('+', ' ')
     if words:
-        # проходимся по каждому слову(словосочетанию)
+        tracks_uris = []
+        playlist_completed = True
+        missing_track = None
+        # Проходимся по каждому слову(словосочетанию)
         for track_name in words:
             track_found = False
             # Спотифай позволяет выводить не более 50 треков за раз, поэтому проходимся по ним в цикле со сдвигом
             for offset in range(0, 300, 50):
-                results = sp.search(q=track_name, limit=50, offset=offset, type='track')
+                results = sp.search(q=track_name,
+                                    limit=50,
+                                    offset=offset,
+                                    type='track')
                 if results['tracks']['items']:
                     for track in results['tracks']['items']:
-                        # сравнение происходит без учёта регистра
+                        # Сравнение происходит без учёта регистра
                         if track['name'].lower() == track_name.lower():
                             tracks_uris.append(track['uri'])
                             track_found = True
@@ -84,24 +90,22 @@ async def create_playlist(message: types.Message):
                     playlist_completed = False
                     missing_track = track_name
                     break
-            # если один из треков не найден, то прерываем поиск остальных
+            # Если один из треков не найден, то прерываем поиск остальных
             if not track_found:
                 playlist_completed = False
                 missing_track = track_name
                 break
-
         if playlist_completed:
-            playlist = sp.user_playlist_create(
-                sp.current_user()['id'],
-                name=message.text.replace('+', ' '),
-                public=True)
+            playlist = sp.user_playlist_create(sp.current_user()['id'],
+                                               name=message.text.replace('+', ' '),
+                                               public=True)
             sp.playlist_add_items(playlist['id'], tracks_uris)
             await start_msg.edit_text(f'Плейлист успешно создан!\n{playlist["external_urls"]["spotify"]}')
         else:
             await start_msg.edit_text('Не удалось подобрать подходящие треки.\n'
                                       f'Ненайденный трек: "{missing_track}".')
             await message.answer('Используйте /help, чтобы получить подсказки по поиску.')
-    # если в строке не оказалось слов
+    # Если в строке не оказалось слов
     else:
         await start_msg.edit_text('Не удалось создать плейлист.')
         await message.answer('Используйте /help, чтобы получить подсказки по поиску.')
